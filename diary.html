@@ -288,7 +288,7 @@ body {
     <div class="diary-title">わたしの日記帳</div>
     <div class="diary-subtitle">My Private Diary</div>
     <span class="hd r">✦</span>
-    <div style="font-size:10px;color:var(--ink3);letter-spacing:.1em;margin-top:6px;">v1.0.0</div>
+    <div style="font-size:10px;color:var(--ink3);letter-spacing:.1em;margin-top:6px;">v1.1.0</div>
   </div>
 
   <!-- SYNC STATUS BAR -->
@@ -312,13 +312,29 @@ body {
     <div class="entry-paper">
       <div class="field-row">
         <span class="field-label">日付</span>
-        <input type="date" id="entry-date" class="field-input" style="max-width:165px">
-        <span class="field-label" style="margin-left:8px">天気</span>
+        <input type="date" id="entry-date" class="field-input" style="max-width:165px" onchange="updateDayOfWeek()">
+        <span id="day-of-week" style="font-size:13px;color:var(--accent2);min-width:32px;"></span>
+        <span class="field-label" style="margin-left:4px">天気</span>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="weather-btn" data-w="☀ 晴" onclick="selectWeather(this)">☀</button>
+          <button class="weather-btn" data-w="🌞 晴" onclick="selectWeather(this)">🌞</button>
           <button class="weather-btn" data-w="🌤 曇晴" onclick="selectWeather(this)">🌤</button>
-          <button class="weather-btn" data-w="☁ 曇" onclick="selectWeather(this)">☁</button>
+          <button class="weather-btn" data-w="🌥 曇" onclick="selectWeather(this)">🌥</button>
           <button class="weather-btn" data-w="🌧 雨" onclick="selectWeather(this)">🌧</button>
+          <button class="weather-btn" data-w="🌧🌧 大雨" onclick="selectWeather(this)" style="font-size:13px;padding:5px 8px;">
+            <svg width="28" height="22" viewBox="0 0 28 22" style="display:block">
+              <line x1="4"  y1="2"  x2="2"  y2="10" stroke="#5b9bd5" stroke-width="1.8" stroke-linecap="round"/>
+              <line x1="9"  y1="0"  x2="7"  y2="10" stroke="#5b9bd5" stroke-width="1.8" stroke-linecap="round"/>
+              <line x1="14" y1="2"  x2="12" y2="10" stroke="#5b9bd5" stroke-width="1.8" stroke-linecap="round"/>
+              <line x1="19" y1="0"  x2="17" y2="10" stroke="#5b9bd5" stroke-width="1.8" stroke-linecap="round"/>
+              <line x1="24" y1="2"  x2="22" y2="10" stroke="#5b9bd5" stroke-width="1.8" stroke-linecap="round"/>
+              <line x1="2"  y1="13" x2="0"  y2="21" stroke="#5b9bd5" stroke-width="1.8" stroke-linecap="round"/>
+              <line x1="7"  y1="11" x2="5"  y2="21" stroke="#5b9bd5" stroke-width="1.8" stroke-linecap="round"/>
+              <line x1="12" y1="13" x2="10" y2="21" stroke="#5b9bd5" stroke-width="1.8" stroke-linecap="round"/>
+              <line x1="17" y1="11" x2="15" y2="21" stroke="#5b9bd5" stroke-width="1.8" stroke-linecap="round"/>
+              <line x1="22" y1="13" x2="20" y2="21" stroke="#5b9bd5" stroke-width="1.8" stroke-linecap="round"/>
+              <line x1="27" y1="11" x2="25" y2="21" stroke="#5b9bd5" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </button>
           <button class="weather-btn" data-w="⛄ 雪" onclick="selectWeather(this)">⛄</button>
         </div>
       </div>
@@ -490,6 +506,24 @@ body {
       </div>
     </div>
 
+    <!-- Anthropic API キー -->
+    <div class="set-section">
+      <div class="set-title">🤖 AIコメント設定</div>
+      <div class="set-row">
+        <span class="set-label">API キー</span>
+        <input type="password" class="set-input" id="anthropic-api-key" placeholder="sk-ant-...">
+      </div>
+      <div style="display:flex;gap:10px;margin-top:4px">
+        <button class="btn-secondary" onclick="saveAnthropicKey()">保存する</button>
+        <button class="btn-gdrive-logout" onclick="clearAnthropicKey()">削除する</button>
+      </div>
+      <div class="set-hint" style="margin-top:10px">
+        AnthropicのAPIキーを設定すると「AIからひと言」機能が使えます。<br>
+        APIキーは <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a> から取得できます。<br>
+        キーはこのデバイスのみに保存され、外部には送信されません。
+      </div>
+    </div>
+
     <!-- JSON バックアップ -->
     <div class="set-section">
       <div class="set-title">🗂 JSONバックアップ</div>
@@ -635,7 +669,12 @@ function switchTab(tab) {
   });
   if (tab==='list') renderList();
   if (tab==='export') initExpPanel();
-  if (tab==='settings') updateSettingsUI();
+  if (tab==='settings') {
+    updateSettingsUI();
+    // Show API key status
+    const keyEl = document.getElementById('anthropic-api-key');
+    if (keyEl) keyEl.placeholder = loadAnthropicKey() ? '✓ 保存済み（変更する場合は入力）' : 'sk-ant-...';
+  }
   window.scrollTo({top:0, behavior:'smooth'});
 }
 
@@ -646,6 +685,15 @@ function setTodayDate() {
   const d = new Date();
   document.getElementById('entry-date').value =
     `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  updateDayOfWeek();
+}
+function updateDayOfWeek() {
+  const val = document.getElementById('entry-date').value;
+  const el = document.getElementById('day-of-week');
+  if (!val || !el) return;
+  const days = ['（日）','（月）','（火）','（水）','（木）','（金）','（土）'];
+  const d = new Date(val + 'T00:00:00');
+  el.textContent = days[d.getDay()];
 }
 function selectMood(btn) {
   document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('selected'));
@@ -703,9 +751,33 @@ function renderPhotosInput() {
 }
 function removePhoto(i) { curPhotos.splice(i,1); renderPhotosInput(); }
 
+/* ============================================================
+   ANTHROPIC API KEY
+============================================================ */
+const ANTHROPIC_KEY_STORAGE = 'diary_anthropic_key';
+
+function loadAnthropicKey() {
+  return localStorage.getItem(ANTHROPIC_KEY_STORAGE) || '';
+}
+function saveAnthropicKey() {
+  const key = document.getElementById('anthropic-api-key').value.trim();
+  if (!key) { showToast('APIキーを入力してください'); return; }
+  if (!key.startsWith('sk-ant-')) { showToast('正しいAPIキーを入力してください（sk-ant- で始まるもの）'); return; }
+  localStorage.setItem(ANTHROPIC_KEY_STORAGE, key);
+  document.getElementById('anthropic-api-key').value = '';
+  showToast('✓ APIキーを保存しました');
+}
+function clearAnthropicKey() {
+  localStorage.removeItem(ANTHROPIC_KEY_STORAGE);
+  document.getElementById('anthropic-api-key').value = '';
+  showToast('APIキーを削除しました');
+}
+
 async function getAIComment() {
   const body = document.getElementById('entry-body').value.trim();
   if (!body) { showToast('まず日記を書いてください'); return; }
+  const apiKey = loadAnthropicKey();
+  if (!apiKey) { showToast('設定タブでAnthropicのAPIキーを設定してください'); return; }
   const aiArea = document.getElementById('ai-area');
   const aiText = document.getElementById('ai-text');
   const btn = document.getElementById('btn-ai');
@@ -714,7 +786,8 @@ async function getAIComment() {
   btn.disabled = true;
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST', headers:{'Content-Type':'application/json'},
+      method:'POST',
+      headers:{'Content-Type':'application/json', 'x-api-key': apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true'},
       body: JSON.stringify({
         model:'claude-sonnet-4-20250514', max_tokens:1000,
         messages:[{role:'user', content:`あなたは優しく共感力のある日記の友人AIです。以下の日記を読んで、200文字以内で温かく前向きなコメントや振り返りを日本語でお願いします。説教や過度なアドバイスは避け、気持ちに寄り添うようにしてください。\n\n日記：${body}`}]
@@ -1176,9 +1249,11 @@ async function processPdf(file) {
   } catch(err){setImpProg(false);showToast('PDFの読み込みに失敗: '+err.message);return;}
   if(!fullText.trim()){setImpProg(false);showToast('テキストを抽出できませんでした。スキャンPDFはOCRが必要です。');return;}
   setImpProg(true,'AIが日記を解析中…','日付・タイトル・本文を読み取っています',55);
+  const apiKey = loadAnthropicKey();
+  if (!apiKey) { setImpProg(false); showToast('設定タブでAnthropicのAPIキーを設定してください'); return; }
   try {
     const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',headers:{'Content-Type':'application/json'},
+      method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4096,messages:[{role:'user',content:`以下はPDFから抽出した日記テキストです。日記の各エントリを解析し、JSON配列として返してください。\n各エントリ：{"date":"YYYY-MM-DD or null","title":"30文字以内","body":"本文"}\n複数エントリを全て抽出。日付が本文中にある場合はそれを使用。本文を大切に保持。JSONのみ返す。\n\nテキスト：\n${fullText.substring(0,8000)}`}]})
     });
     setImpProg(true,'解析完了！','',90);
