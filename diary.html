@@ -551,6 +551,11 @@ function init() {
   renderTagsInput();
   renderPhotosInput();
   loadGdSettings();
+  // Pre-fill Client ID input even before settings tab is opened
+  setTimeout(() => {
+    const el = document.getElementById('gdrive-client-id');
+    if (el && gdClientId) el.value = gdClientId;
+  }, 100);
   updateSyncBar('off', 'Google Drive 未接続 — 設定タブでログインしてください');
 
   // Show origin in settings
@@ -572,24 +577,30 @@ function init() {
 function silentLogin() {
   if (!gdClientId) return;
   if (typeof google === 'undefined') { setTimeout(silentLogin, 500); return; }
-  const client = google.accounts.oauth2.initTokenClient({
-    client_id: gdClientId,
-    scope: GD_SCOPE,
-    prompt: '',  // empty = silent, no popup
-    callback: async (resp) => {
-      if (resp.error) {
-        // Silent failed — user needs to login manually
-        updateSyncBar('off', 'Google Drive 未接続 — 設定タブでログインしてください');
-        return;
+  try {
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: gdClientId,
+      scope: GD_SCOPE,
+      prompt: 'none',  // silent — no popup, uses existing Google session cookie
+      hint: gdEmail || '',  // hint helps Google identify the session
+      callback: async (resp) => {
+        if (resp.error) {
+          // Silent failed (e.g. session expired) — show subtle prompt in sync bar
+          updateSyncBar('off', 'Google Drive 未接続 — 設定タブでログインしてください');
+          updateSettingsUI();
+          return;
+        }
+        gdToken = resp.access_token;
+        saveGdSettings();
+        updateSyncBar('on', '自動接続済み');
+        updateSettingsUI();
+        await syncNow(true);
       }
-      gdToken = resp.access_token;
-      saveGdSettings();
-      updateSyncBar('on', '接続済み');
-      updateSettingsUI();
-      await syncNow(true);
-    }
-  });
-  client.requestAccessToken();
+    });
+    client.requestAccessToken();
+  } catch(e) {
+    updateSyncBar('off', 'Google Drive 未接続 — 設定タブでログインしてください');
+  }
 }
 
 /* ============================================================
@@ -871,8 +882,12 @@ function updateSyncBar(state, msg) {
 }
 
 function updateSettingsUI() {
+  // Always restore saved Client ID into the input field
   const el = document.getElementById('gdrive-client-id');
-  if (el && gdClientId) el.value = gdClientId;
+  if (el) {
+    const saved = gdClientId || (JSON.parse(localStorage.getItem(GD_SETTINGS_KEY)||'{}').clientId || '');
+    if (saved) el.value = saved;
+  }
   if (gdToken && gdEmail) {
     document.getElementById('gdrive-setup').style.display = 'none';
     document.getElementById('gdrive-connected').style.display = 'block';
