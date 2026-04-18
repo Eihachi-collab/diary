@@ -789,7 +789,7 @@ async function getAIComment() {
       method:'POST',
       headers:{'Content-Type':'application/json', 'x-api-key': apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true'},
       body: JSON.stringify({
-        model:'claude-sonnet-4-20250514', max_tokens:1000,
+        model:'claude-sonnet-4-6', max_tokens:1000,
         messages:[{role:'user', content:`あなたは優しく共感力のある日記の友人AIです。以下の日記を読んで、200文字以内で温かく前向きなコメントや振り返りを日本語でお願いします。説教や過度なアドバイスは避け、気持ちに寄り添うようにしてください。\n\n日記：${body}`}]
       })
     });
@@ -1254,7 +1254,7 @@ async function processPdf(file) {
   try {
     const resp=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4096,messages:[{role:'user',content:`以下はPDFから抽出した日記テキストです。日記の各エントリを解析し、JSON配列として返してください。\n各エントリ：{"date":"YYYY-MM-DD or null","title":"30文字以内","body":"本文"}\n複数エントリを全て抽出。日付が本文中にある場合はそれを使用。本文を大切に保持。JSONのみ返す。\n\nテキスト：\n${fullText.substring(0,8000)}`}]})
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4096,messages:[{role:'user',content:`以下はPDFから抽出した日記テキストです。日記の各エントリを解析し、JSON配列として返してください。\n各エントリ：{"date":"YYYY-MM-DD or null","title":"30文字以内","body":"本文"}\n複数エントリを全て抽出。日付が本文中にある場合はそれを使用。本文を大切に保持。JSONのみ返す。\n\nテキスト：\n${fullText.substring(0,8000)}`}]})
     });
     setImpProg(true,'解析完了！','',90);
     const data=await resp.json();
