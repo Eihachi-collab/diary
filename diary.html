@@ -98,15 +98,9 @@ body {
 .photo-del { position:absolute; top:-7px; right:-7px; width:20px; height:20px; border-radius:50%; background:var(--accent); color:white; font-size:11px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; }
 .photo-add-btn { width:70px; height:70px; border:2px dashed var(--line); border-radius:4px; background:none; cursor:pointer; color:var(--ink3); font-size:26px; display:flex; align-items:center; justify-content:center; transition:all .15s; }
 .photo-add-btn:hover { border-color:var(--accent2); color:var(--accent2); }
-.ai-area { display:none; margin-top:16px; padding:14px 16px; background:var(--paper2); border:1px solid #e8d5be; border-left:4px solid var(--accent2); border-radius:0 6px 6px 0; position:relative; z-index:1; animation:fadeIn .3s; }
-.ai-title { font-size:11px; color:var(--accent2); letter-spacing:.16em; margin-bottom:7px; font-weight:700; }
-.ai-text { font-size:14px; color:var(--ink2); line-height:1.9; }
-.ai-loading { display:flex; gap:6px; align-items:center; }
-.ai-dot { width:7px; height:7px; border-radius:50%; background:var(--accent2); animation:dotB 1.2s infinite; }
-.ai-dot:nth-child(2){animation-delay:.2s;} .ai-dot:nth-child(3){animation-delay:.4s;}
+
 .action-row { display:flex; gap:8px; margin-top:18px; justify-content:flex-end; position:relative; z-index:1; flex-wrap:wrap; }
-.btn-ai { padding:9px 16px; background:none; color:var(--accent2); border:1.5px solid var(--accent2); border-radius:5px; font-family:'Noto Serif JP',serif; font-size:13px; cursor:pointer; letter-spacing:.08em; transition:all .15s; }
-.btn-ai:hover{background:#fff5ef;} .btn-ai:disabled{opacity:.5;cursor:wait;}
+
 .btn-clear { padding:9px 16px; background:none; color:var(--ink3); border:1px solid var(--line); border-radius:5px; font-family:'Noto Serif JP',serif; font-size:13px; cursor:pointer; transition:all .15s; }
 .btn-clear:hover { border-color:var(--ink2); color:var(--ink2); }
 .btn-save { padding:9px 26px; background:var(--accent); color:white; border:none; border-radius:5px; font-family:'Noto Serif JP',serif; font-size:13px; cursor:pointer; letter-spacing:.1em; font-weight:700; transition:background .15s; box-shadow:0 2px 6px rgba(192,57,43,.25); }
@@ -271,8 +265,7 @@ body {
   .diary-textarea{padding-left:40px;font-size:15px;min-height:130px;}
   .field-label{min-width:28px;font-size:10px;}
   .mood-btn{width:34px;height:34px;font-size:18px;}
-  .btn-save,.btn-clear,.btn-ai{min-height:44px;}
-  .btn-ai{flex-basis:100%;order:-1;}
+  .btn-save,.btn-clear{min-height:44px;}
   .modal-overlay{padding:0;align-items:flex-end;}
   .modal-box{border-radius:16px 16px 0 0;max-width:100%;max-height:92vh;overflow-y:auto;padding:20px 16px calc(18px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch;}
   .toast{bottom:calc(68px + env(safe-area-inset-bottom));}
@@ -288,7 +281,7 @@ body {
     <div class="diary-title">わたしの日記帳</div>
     <div class="diary-subtitle">My Private Diary</div>
     <span class="hd r">✦</span>
-    <div style="font-size:10px;color:var(--ink3);letter-spacing:.1em;margin-top:6px;">v1.1.0</div>
+    <div style="font-size:10px;color:var(--ink3);letter-spacing:.1em;margin-top:6px;">v1.2.0</div>
   </div>
 
   <!-- SYNC STATUS BAR -->
@@ -372,12 +365,7 @@ body {
           <input type="file" id="photo-file" accept="image/*" multiple style="display:none" onchange="handlePhotos(event)">
         </div>
       </div>
-      <div id="ai-area" class="ai-area">
-        <div class="ai-title">🌿 AIからひと言</div>
-        <div class="ai-text" id="ai-text"></div>
-      </div>
       <div class="action-row">
-        <button class="btn-ai" id="btn-ai" onclick="getAIComment()">AIコメント ✦</button>
         <button class="btn-clear" onclick="clearForm()">クリア</button>
         <button class="btn-save" onclick="saveEntry()">保存する</button>
       </div>
@@ -422,7 +410,6 @@ body {
     <div class="exp-section">
       <div class="exp-title">⚙️ オプション</div>
       <div class="exp-opts">
-        <label class="exp-opt"><input type="checkbox" id="opt-ai" checked> AIコメント</label>
         <label class="exp-opt"><input type="checkbox" id="opt-meta" checked> 気分・天気</label>
         <label class="exp-opt"><input type="checkbox" id="opt-tags" checked> タグ</label>
         <label class="exp-opt"><input type="checkbox" id="opt-toc"> 目次</label>
@@ -503,24 +490,6 @@ body {
 
       <div class="set-hint" style="margin-top:14px">
         同期の仕組み：日記データをGoogle Driveの「マイドライブ」に <code>diary_backup.json</code> として保存します。保存するたびに自動でアップロードされ、起動時に自動でダウンロード・マージされます。
-      </div>
-    </div>
-
-    <!-- Anthropic API キー -->
-    <div class="set-section">
-      <div class="set-title">🤖 AIコメント設定</div>
-      <div class="set-row">
-        <span class="set-label">API キー</span>
-        <input type="password" class="set-input" id="anthropic-api-key" placeholder="sk-ant-...">
-      </div>
-      <div style="display:flex;gap:10px;margin-top:4px">
-        <button class="btn-secondary" onclick="saveAnthropicKey()">保存する</button>
-        <button class="btn-gdrive-logout" onclick="clearAnthropicKey()">削除する</button>
-      </div>
-      <div class="set-hint" style="margin-top:10px">
-        AnthropicのAPIキーを設定すると「AIからひと言」機能が使えます。<br>
-        APIキーは <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a> から取得できます。<br>
-        キーはこのデバイスのみに保存され、外部には送信されません。
       </div>
     </div>
 
@@ -671,9 +640,6 @@ function switchTab(tab) {
   if (tab==='export') initExpPanel();
   if (tab==='settings') {
     updateSettingsUI();
-    // Show API key status
-    const keyEl = document.getElementById('anthropic-api-key');
-    if (keyEl) keyEl.placeholder = loadAnthropicKey() ? '✓ 保存済み（変更する場合は入力）' : 'sk-ant-...';
   }
   window.scrollTo({top:0, behavior:'smooth'});
 }
@@ -751,67 +717,16 @@ function renderPhotosInput() {
 }
 function removePhoto(i) { curPhotos.splice(i,1); renderPhotosInput(); }
 
-/* ============================================================
-   ANTHROPIC API KEY
-============================================================ */
-const ANTHROPIC_KEY_STORAGE = 'diary_anthropic_key';
-
-function loadAnthropicKey() {
-  return localStorage.getItem(ANTHROPIC_KEY_STORAGE) || '';
-}
-function saveAnthropicKey() {
-  const key = document.getElementById('anthropic-api-key').value.trim();
-  if (!key) { showToast('APIキーを入力してください'); return; }
-  if (!key.startsWith('sk-ant-')) { showToast('正しいAPIキーを入力してください（sk-ant- で始まるもの）'); return; }
-  localStorage.setItem(ANTHROPIC_KEY_STORAGE, key);
-  document.getElementById('anthropic-api-key').value = '';
-  showToast('✓ APIキーを保存しました');
-}
-function clearAnthropicKey() {
-  localStorage.removeItem(ANTHROPIC_KEY_STORAGE);
-  document.getElementById('anthropic-api-key').value = '';
-  showToast('APIキーを削除しました');
-}
-
-async function getAIComment() {
-  const body = document.getElementById('entry-body').value.trim();
-  if (!body) { showToast('まず日記を書いてください'); return; }
-  const apiKey = loadAnthropicKey();
-  if (!apiKey) { showToast('設定タブでAnthropicのAPIキーを設定してください'); return; }
-  const aiArea = document.getElementById('ai-area');
-  const aiText = document.getElementById('ai-text');
-  const btn = document.getElementById('btn-ai');
-  aiArea.style.display = 'block';
-  aiText.innerHTML = '<div class="ai-loading"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>';
-  btn.disabled = true;
-  try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{'Content-Type':'application/json', 'x-api-key': apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-6', max_tokens:1000,
-        messages:[{role:'user', content:`あなたは優しく共感力のある日記の友人AIです。以下の日記を読んで、200文字以内で温かく前向きなコメントや振り返りを日本語でお願いします。説教や過度なアドバイスは避け、気持ちに寄り添うようにしてください。\n\n日記：${body}`}]
-      })
-    });
-    const data = await resp.json();
-    aiText.textContent = data.content?.find(b=>b.type==='text')?.text || 'コメントを取得できませんでした。';
-  } catch { aiText.textContent = 'AIへの接続に失敗しました。'; }
-  finally { btn.disabled = false; }
-}
-
 function saveEntry() {
   const date  = document.getElementById('entry-date').value;
   const title = document.getElementById('entry-title').value.trim();
   const body  = document.getElementById('entry-body').value.trim();
   if (!date) { showToast('日付を選択してください'); return; }
   if (!body) { showToast('本文を入力してください'); return; }
-  const aiEl = document.getElementById('ai-text');
-  const aiComment = (document.getElementById('ai-area').style.display!=='none'
-    && aiEl.textContent && !aiEl.textContent.includes('失敗')) ? aiEl.textContent : '';
   const entry = {
     id: editingId || Date.now().toString(), date, body,
     title: title || formatDate(date), mood: selMood, weather: selWeather,
-    tags: [...curTags], photos: [...curPhotos], aiComment, savedAt: Date.now()
+    tags: [...curTags], photos: [...curPhotos], aiComment: '', savedAt: Date.now()
   };
   if (editingId) {
     const idx = entries.findIndex(e=>e.id===editingId);
@@ -832,7 +747,6 @@ function clearForm() {
   curTags=[]; curPhotos=[]; selMood=''; selWeather='';
   document.querySelectorAll('.mood-btn,.weather-btn').forEach(b=>b.classList.remove('selected'));
   renderTagsInput(); renderPhotosInput();
-  document.getElementById('ai-area').style.display='none';
   document.getElementById('char-count').textContent='0 文字';
 }
 
@@ -883,14 +797,13 @@ function renderList() {
 function openModal(id) {
   const e = entries.find(x=>x.id===id); if (!e) return;
   const ph=(e.photos||[]).map(p=>`<img src="${p}" class="modal-photo">`).join('');
-  const ai=e.aiComment?`<div class="modal-ai"><div class="modal-ai-title">🌿 AIからひと言</div>${escH(e.aiComment)}</div>`:'';
   const tags=(e.tags||[]).map(t=>`<span class="card-tag">#${escH(t)}</span>`).join('');
   document.getElementById('modal-content').innerHTML=`
     <div class="modal-date">${formatDate(e.date)}</div>
     <div class="modal-title">${escH(e.title)}</div>
     <div class="modal-meta">${e.weather?`<span style="font-size:18px">${e.weather.split(' ')[0]}</span>`:''}${e.mood?`<span style="font-size:18px">${e.mood}</span>`:''}${tags}</div>
     <div class="modal-body">${escH(e.body)}</div>
-    ${ph?`<div class="modal-photos">${ph}</div>`:''}${ai}
+    ${ph?`<div class="modal-photos">${ph}</div>`:''}
     <div class="modal-actions">
       <button class="btn-del" onclick="deleteEntry('${e.id}')">削除</button>
       <button class="btn-edit" onclick="editEntry('${e.id}')">編集</button>
@@ -918,7 +831,6 @@ function editEntry(id) {
   document.querySelectorAll('.mood-btn').forEach(b=>b.classList.toggle('selected',b.dataset.m===selMood));
   document.querySelectorAll('.weather-btn').forEach(b=>b.classList.toggle('selected',b.dataset.w===selWeather));
   renderTagsInput(); renderPhotosInput(); updateCharCount();
-  if (e.aiComment) { document.getElementById('ai-area').style.display='block'; document.getElementById('ai-text').textContent=e.aiComment; }
   switchTab('write'); window.scrollTo({top:0,behavior:'smooth'});
 }
 
@@ -1137,7 +1049,6 @@ async function exportPdf() {
   const target=getExpEntries(); if (!target.length) { showToast('書き出す日記がありません'); return; }
   const btn=document.getElementById('btn-export'); btn.disabled=true;
   setExpProg(true,'PDFを生成しています…',5);
-  const inclAI=document.getElementById('opt-ai').checked;
   const inclMeta=document.getElementById('opt-meta').checked;
   const inclTags=document.getElementById('opt-tags').checked;
   const inclToc=document.getElementById('opt-toc').checked;
@@ -1181,14 +1092,6 @@ async function exportPdf() {
       doc.setDrawColor(232,221,208);doc.setLineWidth(0.3);doc.line(ML+12,y,PW-MR,y);y+=5;
       y=writeLines(doc.splitTextToSize(e.body||'',CW-12),ML+12,y,10.5,80,65,52);y+=4;
       if(inclTags&&(e.tags||[]).length){y=writeLines([e.tags.map(t=>'#'+t).join('  ')],ML+12,y,9,176,152,128);y+=3;}
-      if(inclAI&&e.aiComment){
-        if(y>PH-MB-22){doc.addPage();pageIdx++;y=MT;drawHeader();}
-        const al=doc.splitTextToSize('🌿 '+e.aiComment,CW-18);const bh=al.length*5.5+8;
-        if(y+bh>PH-MB){doc.addPage();pageIdx++;y=MT;drawHeader();}
-        doc.setFillColor(250,243,228);doc.setDrawColor(232,115,74);doc.setLineWidth(0.4);
-        doc.rect(ML+12,y,CW-14,bh,'F');doc.line(ML+12,y,ML+12,y+bh);y+=5;
-        y=writeLines(al,ML+16,y,9.5,122,99,82);y+=5;
-      }
     }
     setExpProg(true,'仕上げ中…',93);
     const total=doc.getNumberOfPages();
@@ -1248,21 +1151,17 @@ async function processPdf(file) {
     }
   } catch(err){setImpProg(false);showToast('PDFの読み込みに失敗: '+err.message);return;}
   if(!fullText.trim()){setImpProg(false);showToast('テキストを抽出できませんでした。スキャンPDFはOCRが必要です。');return;}
-  setImpProg(true,'AIが日記を解析中…','日付・タイトル・本文を読み取っています',55);
-  const apiKey = loadAnthropicKey();
-  if (!apiKey) { setImpProg(false); showToast('設定タブでAnthropicのAPIキーを設定してください'); return; }
-  try {
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4096,messages:[{role:'user',content:`以下はPDFから抽出した日記テキストです。日記の各エントリを解析し、JSON配列として返してください。\n各エントリ：{"date":"YYYY-MM-DD or null","title":"30文字以内","body":"本文"}\n複数エントリを全て抽出。日付が本文中にある場合はそれを使用。本文を大切に保持。JSONのみ返す。\n\nテキスト：\n${fullText.substring(0,8000)}`}]})
-    });
-    setImpProg(true,'解析完了！','',90);
-    const data=await resp.json();
-    const raw=data.content?.find(b=>b.type==='text')?.text||'[]';
-    importedParsed=JSON.parse(raw.replace(/```json|```/g,'').trim());
-    if(!Array.isArray(importedParsed)||!importedParsed.length)throw new Error('エントリが見つかりませんでした');
-    setImpProg(false);showImpPreview(file.name,importedParsed);
-  } catch(err){setImpProg(false);showToast('解析に失敗しました。再度お試しください。');console.error(err);}
+
+  // Without AI, create a single entry from the full extracted text
+  setImpProg(true,'テキストを取り込んでいます…','',80);
+  const today = new Date().toISOString().split('T')[0];
+  importedParsed = [{
+    date: null,
+    title: file.name.replace(/\.pdf$/i,'').substring(0,30),
+    body: fullText.trim()
+  }];
+  setImpProg(false);
+  showImpPreview(file.name, importedParsed);
 }
 function showImpPreview(fname,parsed){
   document.getElementById('imp-preview-title').textContent=`「${fname}」から ${parsed.length} 件見つかりました`;
