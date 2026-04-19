@@ -470,6 +470,13 @@ textarea { height: 72px; resize: vertical; }
           <button class="btn btn-primary" onclick="addRecipe()" style="margin-bottom:0;">追加</button>
         </div>
       </div>
+      <div style="border-top:0.5px solid var(--border); padding-top:10px; margin-top:4px; display:flex; align-items:center; justify-content:space-between;">
+        <div style="font-size:12px; color:var(--text3); display:flex; align-items:center; gap:6px;">
+          <span class="status-dot" id="sync-dot2"></span>
+          <span id="sync-msg2">Drive未接続</span>
+        </div>
+        <button class="btn btn-sm btn-ghost" onclick="manualSync()">今すぐ同期</button>
+      </div>
     </div>
     <div class="card" style="padding:14px 16px 6px;">
       <div class="search-bar">
@@ -519,13 +526,13 @@ textarea { height: 72px; resize: vertical; }
       </div>
       <input type="text" id="client-id-input" placeholder="xxxx.apps.googleusercontent.com" style="margin-bottom:8px;" />
       <div style="display:flex; gap:8px;">
-        <button class="btn btn-primary" onclick="saveClientId()">保存</button>
+        <button class="btn btn-primary" onclick="saveClientId()">Client IDを保存</button>
         <button class="btn btn-primary" onclick="driveLogin()">Googleでログイン</button>
         <button class="btn btn-ghost" onclick="driveSignOut()">ログアウト</button>
       </div>
       <div style="margin-top:12px; font-size:12px; color:var(--text3); line-height:1.6;">
-        ⚙ 初回のみ設定が必要です。Client IDは他のデバイスでも同じものを使用してください。<br>
-        データは Google Drive の <code>recipes_backup.json</code> に自動保存されます。
+        ⚙ 初回のみClient IDの入力が必要です。以降は「Googleでログイン」だけでOKです。<br>
+        データは Google Drive の <code>recipes_backup.json</code> に<strong>レシピ追加・記録のたびに自動保存</strong>されます。
       </div>
     </div>
     <div class="card">
@@ -653,8 +660,14 @@ function driveLogin() {
 }
 
 function setSyncStatus(ok, msg) {
-  document.getElementById('sync-dot').className = 'status-dot ' + (ok ? 'ok' : '');
-  document.getElementById('sync-msg').textContent = msg;
+  ['sync-dot','sync-dot2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'status-dot ' + (ok ? 'ok' : '');
+  });
+  ['sync-msg','sync-msg2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = msg;
+  });
 }
 
 async function loadFromDrive() {
@@ -722,6 +735,22 @@ async function saveToDrive() {
 
 function saveAll() {
   saveLocal();
+  scheduleSync();
+}
+
+let syncTimer = null;
+function scheduleSync() {
+  clearTimeout(syncTimer);
+  setSyncStatus(isSignedIn, isSignedIn ? '同期待機中...' : '未接続');
+  syncTimer = setTimeout(() => saveToDrive(), 1500);
+}
+
+function manualSync() {
+  if (!accessToken) {
+    toast('先にGoogle Driveにログインしてください（設定タブ）');
+    return;
+  }
+  setSyncStatus(true, '同期中...');
   saveToDrive();
 }
 
