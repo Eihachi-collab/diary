@@ -519,7 +519,8 @@ textarea { height: 72px; resize: vertical; }
       </div>
       <input type="text" id="client-id-input" placeholder="xxxx.apps.googleusercontent.com" style="margin-bottom:8px;" />
       <div style="display:flex; gap:8px;">
-        <button class="btn btn-primary" onclick="saveClientId()">保存してログイン</button>
+        <button class="btn btn-primary" onclick="saveClientId()">保存</button>
+        <button class="btn btn-primary" onclick="driveLogin()">Googleでログイン</button>
         <button class="btn btn-ghost" onclick="driveSignOut()">ログアウト</button>
       </div>
       <div style="margin-top:12px; font-size:12px; color:var(--text3); line-height:1.6;">
@@ -599,7 +600,6 @@ const FILE_NAME = 'recipes_backup.json';
 let recipes = [];
 let logs = [];
 let driveFileId = null;
-let gapiReady = false;
 let isSignedIn = false;
 
 function loadLocal() {
@@ -611,42 +611,45 @@ function saveLocal() {
   localStorage.setItem('recipe_logs', JSON.stringify(logs));
 }
 
-// ======= GAPI =======
+// ======= GOOGLE DRIVE (新方式: google.accounts.oauth2) =======
+let accessToken = null;
+let tokenClient = null;
+
 function initGapi() {
   const clientId = localStorage.getItem('recipe_client_id');
   if (!clientId) {
-    setSyncStatus(false, 'Client IDを設定してください');
+    setSyncStatus(false, 'Client IDを設定してください（設定タブ）');
     return;
   }
   const s = document.createElement('script');
-  s.src = 'https://apis.google.com/js/api.js';
+  s.src = 'https://accounts.google.com/gsi/client';
   s.onload = () => {
-    gapi.load('client:auth2', () => {
-      gapi.client.init({
-        clientId: clientId,
-        scope: 'https://www.googleapis.com/auth/drive.file',
-        discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
-      }).then(() => {
-        gapiReady = true;
-        const auth = gapi.auth2.getAuthInstance();
-        auth.isSignedIn.listen(handleSignIn);
-        handleSignIn(auth.isSignedIn.get());
-      }).catch(e => {
-        setSyncStatus(false, 'Client IDが無効です');
-      });
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: 'https://www.googleapis.com/auth/drive.file',
+      callback: (resp) => {
+        if (resp.error) {
+          setSyncStatus(false, 'ログインに失敗しました: ' + resp.error);
+          return;
+        }
+        accessToken = resp.access_token;
+        isSignedIn = true;
+        setSyncStatus(true, 'Google Driveに接続中...');
+        loadFromDrive();
+      },
     });
+    setSyncStatus(false, 'ログインしていません（設定タブで接続）');
   };
+  s.onerror = () => setSyncStatus(false, 'Google認証の読み込みに失敗しました');
   document.head.appendChild(s);
 }
 
-function handleSignIn(signedIn) {
-  isSignedIn = signedIn;
-  if (signedIn) {
-    setSyncStatus(true, 'Google Driveに接続中');
-    loadFromDrive();
-  } else {
-    setSyncStatus(false, 'ログインしていません（設定タブで接続）');
+function driveLogin() {
+  if (!tokenClient) {
+    toast('少し待ってから再試行してください');
+    return;
   }
+  tokenClient.requestAccessToken({ prompt: '' });
 }
 
 function setSyncStatus(ok, msg) {
@@ -655,29 +658,33 @@ function setSyncStatus(ok, msg) {
 }
 
 async function loadFromDrive() {
+  if (!accessToken) return;
   try {
-    const res = await gapi.client.drive.files.list({
-      q: `name='${FILE_NAME}' and trashed=false`,
-      fields: 'files(id,name)',
-      spaces: 'drive',
-    });
-    const files = res.result.files;
-    if (files && files.length > 0) {
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=name%3D'${FILE_NAME}'+and+trashed%3Dfalse&fields=files(id,name)`,
+      { headers: { Authorization: 'Bearer ' + accessToken } }
+    );
+    const data = await res.json();
+    const files = data.files || [];
+    if (files.length > 0) {
       driveFileId = files[0].id;
-      const content = await gapi.client.drive.files.get({ fileId: driveFileId, alt: 'media' });
-      const data = JSON.parse(content.body);
-      const localRecipesAt = Math.max(...recipes.map(r => r.updatedAt || 0), 0);
-      const driveRecipesAt = Math.max(...(data.recipes||[]).map(r => r.updatedAt || 0), 0);
-      if (driveRecipesAt >= localRecipesAt) {
-        recipes = data.recipes || [];
-        logs = data.logs || [];
+      const content = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`,
+        { headers: { Authorization: 'Bearer ' + accessToken } }
+      );
+      const json = await content.json();
+      const localAt = Math.max(...recipes.map(r => r.updatedAt || 0), 0);
+      const driveAt = Math.max(...(json.recipes||[]).map(r => r.updatedAt || 0), 0);
+      if (driveAt >= localAt) {
+        recipes = json.recipes || [];
+        logs = json.logs || [];
         saveLocal();
       }
       setSyncStatus(true, '同期済み');
       renderAll();
       toast('Driveからデータを読み込みました');
     } else {
-      setSyncStatus(true, '接続中（初回保存時に作成されます）');
+      setSyncStatus(true, '接続済み（初回保存時にファイル作成）');
     }
   } catch(e) {
     setSyncStatus(false, '同期エラー: ' + e.message);
@@ -685,30 +692,27 @@ async function loadFromDrive() {
 }
 
 async function saveToDrive() {
-  if (!isSignedIn || !gapiReady) return;
+  if (!accessToken) return;
   const content = JSON.stringify({ recipes, logs, savedAt: Date.now() });
   const boundary = '-------314159265358979323846';
-  const mimeType = 'application/json';
-  const metadata = JSON.stringify({ name: FILE_NAME, mimeType });
-  const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n${content}\r\n--${boundary}--`;
+  const metadata = JSON.stringify({ name: FILE_NAME, mimeType: 'application/json' });
+  const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
   try {
+    let res;
     if (driveFileId) {
-      await gapi.client.request({
-        path: `/upload/drive/v3/files/${driveFileId}`,
+      res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=multipart`, {
         method: 'PATCH',
-        params: { uploadType: 'multipart' },
-        headers: { 'Content-Type': `multipart/related; boundary="${boundary}"` },
+        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': `multipart/related; boundary="${boundary}"` },
         body,
       });
     } else {
-      const res = await gapi.client.request({
-        path: '/upload/drive/v3/files',
+      res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
         method: 'POST',
-        params: { uploadType: 'multipart' },
-        headers: { 'Content-Type': `multipart/related; boundary="${boundary}"` },
+        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': `multipart/related; boundary="${boundary}"` },
         body,
       });
-      driveFileId = res.result.id;
+      const json = await res.json();
+      driveFileId = json.id;
     }
     setSyncStatus(true, '同期済み · ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit',minute:'2-digit'}));
   } catch(e) {
@@ -897,14 +901,17 @@ function saveClientId() {
   const id = document.getElementById('client-id-input').value.trim();
   if (!id) { toast('Client IDを入力してください'); return; }
   localStorage.setItem('recipe_client_id', id);
-  toast('保存しました。ページをリロードしてください');
-  setTimeout(()=>location.reload(), 1200);
+  toast('保存しました。「Googleでログイン」を押してください');
+  initGapi();
 }
 function driveSignOut() {
-  if (gapiReady && gapi.auth2) {
-    gapi.auth2.getAuthInstance().signOut();
-    setSyncStatus(false, 'ログアウトしました');
+  accessToken = null;
+  isSignedIn = false;
+  if (window.google && google.accounts && google.accounts.oauth2) {
+    google.accounts.oauth2.revoke(accessToken, () => {});
   }
+  setSyncStatus(false, 'ログアウトしました');
+  toast('ログアウトしました');
 }
 
 function exportJSON() {
