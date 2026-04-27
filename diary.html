@@ -281,7 +281,7 @@ body {
     <div class="diary-title">わたしの日記帳</div>
     <div class="diary-subtitle">My Private Diary</div>
     <span class="hd r">✦</span>
-    <div style="font-size:10px;color:var(--ink3);letter-spacing:.1em;margin-top:6px;">v1.3.0</div>
+    <div style="font-size:10px;color:var(--ink3);letter-spacing:.1em;margin-top:6px;">v1.4.0</div>
   </div>
 
   <!-- SYNC STATUS BAR -->
@@ -537,7 +537,7 @@ const GD_FILENAME = 'diary_backup.json';
 const GD_SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email';
 
 let entries = [];
-let deletedIds = []; // 削除済みエントリIDリスト（同期時に復活防止）
+let deletedIds = [];
 let curTags = [], curPhotos = [], selMood = '', selWeather = '', filterTag = '', editingId = null;
 
 // Google Drive state
@@ -626,7 +626,6 @@ function persistLocal() {
 function mergeEntries(a, b) {
   const map = new Map();
   [...a, ...b].forEach(e => {
-    // 削除済みIDは復活させない
     if (deletedIds.includes(e.id)) return;
     const ex = map.get(e.id);
     if (!ex || (e.savedAt || 0) > (ex.savedAt || 0)) map.set(e.id, e);
@@ -701,14 +700,84 @@ function renderTagsInput() {
   w.appendChild(inp);
 }
 function removeTag(i) { curTags.splice(i,1); renderTagsInput(); }
-function handlePhotos(e) {
-  Array.from(e.target.files).forEach(f => {
-    if (f.size > 3*1024*1024) { showToast('3MB以下の画像をご利用ください'); return; }
-    const r = new FileReader();
-    r.onload = ev => { curPhotos.push(ev.target.result); renderPhotosInput(); };
-    r.readAsDataURL(f);
+function resizeImageFile(file, quality) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 1600;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else       { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = url;
   });
+}
+
+function showResizeDialog(file, onDecide) {
+  const old = document.getElementById('resize-dialog-overlay');
+  if (old) old.remove();
+  const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+  const overlay = document.createElement('div');
+  overlay.id = 'resize-dialog-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `
+    <div style="background:var(--paper);border-radius:12px;padding:24px 20px;max-width:320px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.25);font-family:'Noto Serif JP',serif">
+      <div style="font-size:15px;font-weight:bold;color:var(--ink);margin-bottom:6px">📷 画像が大きすぎます</div>
+      <div style="font-size:13px;color:var(--ink2);margin-bottom:16px">
+        「${file.name}」は <strong>${sizeMB}MB</strong> です（上限3MB）。<br>このままリサイズして追加しますか？
+      </div>
+      <div style="font-size:13px;color:var(--ink);margin-bottom:10px;font-weight:bold">リサイズ品質を選択：</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="radio" name="rq" value="0.9" checked> 高品質（容量大きめ）</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="radio" name="rq" value="0.75"> 標準（バランス）</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="radio" name="rq" value="0.5"> 軽量（容量小さめ）</label>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="resize-cancel-btn" style="padding:7px 16px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--ink2);cursor:pointer;font-size:13px">キャンセル</button>
+        <button id="resize-ok-btn" style="padding:7px 18px;border-radius:6px;border:none;background:var(--accent);color:white;cursor:pointer;font-size:13px;font-weight:bold">リサイズして追加</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('resize-cancel-btn').onclick = () => { overlay.remove(); onDecide(null); };
+  document.getElementById('resize-ok-btn').onclick = () => {
+    const q = parseFloat(overlay.querySelector('input[name="rq"]:checked').value);
+    overlay.remove(); onDecide(q);
+  };
+}
+
+function handlePhotos(e) {
+  const files = Array.from(e.target.files);
   e.target.value = '';
+  function processNext(idx) {
+    if (idx >= files.length) return;
+    const f = files[idx];
+    if (f.size > 3 * 1024 * 1024) {
+      showResizeDialog(f, async (quality) => {
+        if (quality !== null) {
+          showToast('⏳ リサイズ中…');
+          const dataUrl = await resizeImageFile(f, quality);
+          const approxKB = Math.round(dataUrl.length * 0.75 / 1024);
+          curPhotos.push(dataUrl); renderPhotosInput();
+          showToast(`✓ リサイズ完了（約${approxKB}KB）`);
+        }
+        processNext(idx + 1);
+      });
+    } else {
+      const r = new FileReader();
+      r.onload = ev => { curPhotos.push(ev.target.result); renderPhotosInput(); processNext(idx + 1); };
+      r.readAsDataURL(f);
+    }
+  }
+  processNext(0);
 }
 function renderPhotosInput() {
   const a = document.getElementById('photo-area'); a.innerHTML = '';
@@ -825,11 +894,9 @@ function handleOverlayClick(e) { if (e.target===document.getElementById('modal-o
 function deleteEntry(id) {
   if (!confirm('この日記を削除しますか？\nこの操作は取り消せません。')) return;
   entries = entries.filter(e => e.id !== id);
-  // 削除済みIDを記録（同期時の復活防止）
   if (!deletedIds.includes(id)) deletedIds.push(id);
   persistLocal();
   closeModal(); renderList(); showToast('削除しました');
-  // 即時Drive同期（遅延なし）
   if (gdToken) syncNow(true);
 }
 function editEntry(id) {
@@ -996,7 +1063,6 @@ async function syncNow(silent=false) {
       cloudEntries = Array.isArray(cloud.entries) ? cloud.entries : [];
       cloudDeletedIds = Array.isArray(cloud.deletedIds) ? cloud.deletedIds : [];
     } catch { cloudEntries = []; cloudDeletedIds = []; }
-    // 削除済みIDリストをDriveとマージ（どちらかで削除されたものを統合）
     deletedIds = [...new Set([...deletedIds, ...cloudDeletedIds])];
     const merged = mergeEntries(entries, cloudEntries);
     entries = merged;
