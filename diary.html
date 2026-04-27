@@ -281,7 +281,7 @@ body {
     <div class="diary-title">わたしの日記帳</div>
     <div class="diary-subtitle">My Private Diary</div>
     <span class="hd r">✦</span>
-    <div style="font-size:10px;color:var(--ink3);letter-spacing:.1em;margin-top:6px;">v1.2.0</div>
+    <div style="font-size:10px;color:var(--ink3);letter-spacing:.1em;margin-top:6px;">v1.3.0</div>
   </div>
 
   <!-- SYNC STATUS BAR -->
@@ -531,11 +531,13 @@ body {
    STATE
 ============================================================ */
 const STORAGE_KEY = 'diary_entries_v4';
+const DELETED_KEY = 'diary_deleted_ids_v1';
 const GD_SETTINGS_KEY = 'diary_gdrive_v2';
 const GD_FILENAME = 'diary_backup.json';
 const GD_SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email';
 
 let entries = [];
+let deletedIds = []; // 削除済みエントリIDリスト（同期時に復活防止）
 let curTags = [], curPhotos = [], selMood = '', selWeather = '', filterTag = '', editingId = null;
 
 // Google Drive state
@@ -612,14 +614,20 @@ function silentLogin() {
 function loadLocal() {
   try { const r = localStorage.getItem(STORAGE_KEY); if (r) entries = JSON.parse(r); }
   catch { entries = []; }
+  try { const d = localStorage.getItem(DELETED_KEY); if (d) deletedIds = JSON.parse(d); }
+  catch { deletedIds = []; }
 }
 function persistLocal() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); }
   catch { showToast('⚠ ローカル保存に失敗しました'); }
+  try { localStorage.setItem(DELETED_KEY, JSON.stringify(deletedIds)); }
+  catch {}
 }
 function mergeEntries(a, b) {
   const map = new Map();
   [...a, ...b].forEach(e => {
+    // 削除済みIDは復活させない
+    if (deletedIds.includes(e.id)) return;
     const ex = map.get(e.id);
     if (!ex || (e.savedAt || 0) > (ex.savedAt || 0)) map.set(e.id, e);
   });
@@ -816,9 +824,13 @@ function closeModal() { document.getElementById('modal-overlay').classList.remov
 function handleOverlayClick(e) { if (e.target===document.getElementById('modal-overlay')) closeModal(); }
 function deleteEntry(id) {
   if (!confirm('この日記を削除しますか？\nこの操作は取り消せません。')) return;
-  entries=entries.filter(e=>e.id!==id); persistLocal();
-  if (gdToken) setTimeout(() => syncNow(false), 600);
+  entries = entries.filter(e => e.id !== id);
+  // 削除済みIDを記録（同期時の復活防止）
+  if (!deletedIds.includes(id)) deletedIds.push(id);
+  persistLocal();
   closeModal(); renderList(); showToast('削除しました');
+  // 即時Drive同期（遅延なし）
+  if (gdToken) syncNow(true);
 }
 function editEntry(id) {
   const e=entries.find(x=>x.id===id); if (!e) return;
@@ -978,13 +990,17 @@ async function syncNow(silent=false) {
   try {
     const fid = gdFileId || await findOrCreateFile();
     let cloudEntries = [];
+    let cloudDeletedIds = [];
     try {
       const cloud = await downloadFromDrive(fid);
       cloudEntries = Array.isArray(cloud.entries) ? cloud.entries : [];
-    } catch { cloudEntries = []; }
+      cloudDeletedIds = Array.isArray(cloud.deletedIds) ? cloud.deletedIds : [];
+    } catch { cloudEntries = []; cloudDeletedIds = []; }
+    // 削除済みIDリストをDriveとマージ（どちらかで削除されたものを統合）
+    deletedIds = [...new Set([...deletedIds, ...cloudDeletedIds])];
     const merged = mergeEntries(entries, cloudEntries);
     entries = merged;
-    await uploadToDrive(fid, {entries, syncedAt:Date.now()});
+    await uploadToDrive(fid, {entries, deletedIds, syncedAt:Date.now()});
     persistLocal();
     saveGdSettings();
     const now = new Date();
