@@ -283,7 +283,7 @@ body {
     <div class="diary-title">わたしの日記帳</div>
     <div class="diary-subtitle">My Private Diary</div>
     <span class="hd r">✦</span>
-    <div style="font-size:10px;color:var(--ink3);letter-spacing:.1em;margin-top:6px;">v1.5.0</div>
+    <div style="font-size:10px;color:var(--ink3);letter-spacing:.1em;margin-top:6px;">v1.6.0</div>
   </div>
 
   <!-- SYNC STATUS BAR -->
@@ -295,15 +295,15 @@ body {
   </div>
 
   <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('write')">✏ 書く</button>
-    <button class="tab-btn" onclick="switchTab('list')">📖 読む</button>
+    <button class="tab-btn active" onclick="switchTab('list')">📖 読む</button>
+    <button class="tab-btn" onclick="switchTab('write')">✏ 書く</button>
     <button class="tab-btn" onclick="switchTab('export')">📤 書き出す</button>
     <button class="tab-btn" onclick="switchTab('import')">📥 取り込む</button>
     <button class="tab-btn" onclick="switchTab('settings')">⚙ 設定</button>
   </div>
 
   <!-- WRITE -->
-  <div id="tab-write" class="panel active">
+  <div id="tab-write" class="panel">
     <div class="entry-paper">
       <div class="field-row">
         <span class="field-label">日付</span>
@@ -375,7 +375,7 @@ body {
   </div>
 
   <!-- LIST -->
-  <div id="tab-list" class="panel">
+  <div id="tab-list" class="panel active">
     <div class="search-bar">
       <input type="text" class="search-input" id="search-input" placeholder="🔍  キーワード・日付・タグで検索…" oninput="renderList()">
     </div>
@@ -417,7 +417,7 @@ body {
         <label class="exp-opt"><input type="checkbox" id="opt-toc"> 目次</label>
       </div>
     </div>
-    <button class="btn-export" id="btn-export" onclick="exportPdf()">📄　PDFとして書き出す</button>
+    <button class="btn-export" id="btn-export" onclick="exportPdf()">🖨　印刷・PDFとして保存</button>
     <div class="exp-prog" id="exp-prog">
       <div class="exp-prog-label" id="exp-prog-label">準備中…</div>
       <div class="exp-prog-bar-wrap"><div class="exp-prog-bar" id="exp-prog-bar"></div></div>
@@ -511,8 +511,8 @@ body {
 
 <!-- MOBILE BOTTOM NAV -->
 <nav class="tab-bar-bottom">
-  <button class="tbb active" onclick="switchTab('write')" id="tbb-write"><span class="ti">✏️</span>書く</button>
-  <button class="tbb" onclick="switchTab('list')" id="tbb-list"><span class="ti">📖</span>読む</button>
+  <button class="tbb active" onclick="switchTab('list')" id="tbb-list"><span class="ti">📖</span>読む</button>
+  <button class="tbb" onclick="switchTab('write')" id="tbb-write"><span class="ti">✏️</span>書く</button>
   <button class="tbb" onclick="switchTab('export')" id="tbb-export"><span class="ti">📤</span>書き出す</button>
   <button class="tbb" onclick="switchTab('import')" id="tbb-import"><span class="ti">📥</span>取り込む</button>
   <button class="tbb" onclick="switchTab('settings')" id="tbb-settings"><span class="ti">⚙️</span>設定</button>
@@ -553,10 +553,9 @@ let gdSyncing = false;
    INIT
 ============================================================ */
 function init() {
-  // 初期表示は書くタブなのでタイトルを非表示
-  const header = document.querySelector('.diary-header');
-  if (header) header.classList.add('hidden');
   loadLocal();
+  // 初期表示は「読む」タブ、タイトルは表示
+  switchTab('list');
   setTodayDate();
   renderTagsInput();
   renderPhotosInput();
@@ -642,13 +641,13 @@ function mergeEntries(a, b) {
    TABS
 ============================================================ */
 function switchTab(tab) {
-  const tabs = ['write','list','export','import','settings'];
+  const tabs = ['list','write','export','import','settings'];
   document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', tabs[i]===tab));
   tabs.forEach(t => {
     const p = document.getElementById('tab-'+t); if (p) p.classList.toggle('active', t===tab);
     const b = document.getElementById('tbb-'+t); if (b) b.classList.toggle('active', t===tab);
   });
-  // 書くタブのときはタイトルを非表示にしてスペースを確保
+  // 書くタブのときのみタイトルを非表示
   const header = document.querySelector('.diary-header');
   if (header) header.classList.toggle('hidden', tab === 'write');
   if (tab==='list') renderList();
@@ -1147,72 +1146,84 @@ function setExpProg(show,label='',pct=0) {
 async function exportPdf() {
   const target=getExpEntries(); if (!target.length) { showToast('書き出す日記がありません'); return; }
   const btn=document.getElementById('btn-export'); btn.disabled=true;
-  setExpProg(true,'PDFを生成しています…',5);
+  setExpProg(true,'印刷用ページを作成中…',30);
   const inclMeta=document.getElementById('opt-meta').checked;
   const inclTags=document.getElementById('opt-tags').checked;
   const inclToc=document.getElementById('opt-toc').checked;
   try {
-    const {jsPDF}=window.jspdf;
-    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const PW=210,PH=297,ML=18,MR=18,MT=20,MB=20,CW=174,LH=6.5;
-    function drawFooter(p,t){doc.setFontSize(9);doc.setTextColor(160,140,120);doc.text(`${p} / ${t}`,PW/2,PH-10,{align:'center'});}
-    function drawHeader(){doc.setDrawColor(192,57,43);doc.setLineWidth(0.6);doc.line(ML,MT-4,PW-MR,MT-4);doc.setFontSize(8);doc.setTextColor(192,57,43);doc.text('わたしの日記帳',ML,MT-6);}
-    function writeLines(lines,x,y,fs,r,g,b){
-      doc.setFontSize(fs);doc.setTextColor(r,g,b);
-      for(const line of lines){if(y>PH-MB-4){doc.addPage();y=MT;drawHeader();}doc.text(line,x,y);y+=LH*(fs/10);}
-      return y;
-    }
-    let pageIdx=1; const tocData=[];
-    setExpProg(true,'表紙を作成中…',15);
-    doc.setFillColor(253,248,240);doc.rect(0,0,PW,PH,'F');
-    doc.setDrawColor(192,57,43);doc.setLineWidth(1.2);doc.line(ML,60,PW-MR,60);doc.line(ML,62,PW-MR,62);
-    doc.setFontSize(28);doc.setTextColor(61,44,30);doc.text('My Diary',PW/2,80,{align:'center'});
-    doc.setFontSize(14);doc.setTextColor(122,99,82);doc.text('わたしの日記帳',PW/2,90,{align:'center'});
-    doc.setFontSize(11);doc.setTextColor(176,152,128);
     const rv=document.getElementById('exp-range').value; let rl='すべての記録';
     if(rv==='year') rl=document.getElementById('exp-year').value+'年の記録';
     else if(rv==='period') rl=(document.getElementById('exp-from').value||'')+' 〜 '+(document.getElementById('exp-to').value||'');
-    doc.text(rl,PW/2,104,{align:'center'});doc.setFontSize(10);doc.text(`全 ${target.length} 件`,PW/2,112,{align:'center'});
-    doc.setDrawColor(192,57,43);doc.setLineWidth(0.4);doc.line(ML,PH-30,PW-MR,PH-30);
-    doc.setFontSize(9);doc.setTextColor(176,152,128);
-    const td=new Date();doc.text(`${td.getFullYear()}年${td.getMonth()+1}月${td.getDate()}日 出力`,PW/2,PH-22,{align:'center'});
-    let tocPage=-1;
-    if(inclToc){doc.addPage();pageIdx++;tocPage=pageIdx;}
-    for(let ei=0;ei<target.length;ei++){
-      const e=target[ei];
-      setExpProg(true,`書き出し中… (${ei+1}/${target.length})`,20+Math.round((ei/target.length)*70));
-      doc.addPage();pageIdx++;tocData.push({date:e.date,title:e.title,page:pageIdx});
-      doc.setFillColor(253,248,240);doc.rect(0,0,PW,PH,'F');
-      doc.setDrawColor(240,192,160);doc.setLineWidth(0.3);doc.line(ML+8,MT,ML+8,PH-MB);
-      drawHeader();let y=MT+4;
-      doc.setFontSize(10);doc.setTextColor(192,57,43);doc.text(formatDate(e.date),ML+12,y);y+=7;
-      if(inclMeta&&(e.mood||e.weather)){const mp=[];if(e.weather)mp.push(e.weather);if(e.mood)mp.push(e.mood);doc.setFontSize(10);doc.setTextColor(176,152,128);doc.text(mp.join('   '),ML+12,y);y+=6;}
-      y=writeLines(doc.splitTextToSize(e.title||'',CW-12),ML+12,y+2,15,61,44,30);y+=3;
-      doc.setDrawColor(232,221,208);doc.setLineWidth(0.3);doc.line(ML+12,y,PW-MR,y);y+=5;
-      y=writeLines(doc.splitTextToSize(e.body||'',CW-12),ML+12,y,10.5,80,65,52);y+=4;
-      if(inclTags&&(e.tags||[]).length){y=writeLines([e.tags.map(t=>'#'+t).join('  ')],ML+12,y,9,176,152,128);y+=3;}
+    const td=new Date();
+    const dateStr=`${td.getFullYear()}年${td.getMonth()+1}月${td.getDate()}日 出力`;
+
+    let tocHtml='';
+    if(inclToc){
+      tocHtml=`<div class="toc-page"><h2 style="color:#c0392b;border-bottom:1px solid #c0392b;padding-bottom:6px;margin-bottom:16px">目　次</h2><table style="width:100%;border-collapse:collapse">`;
+      target.forEach((e,i)=>{
+        tocHtml+=`<tr style="border-bottom:1px dotted #ddd"><td style="padding:5px 0;color:#7a6352;font-size:11px;width:110px">${formatDate(e.date)}</td><td style="padding:5px 0;color:#3d2c1e;font-size:12px">${escH(e.title||formatDate(e.date))}</td><td style="padding:5px 0;color:#c0392b;text-align:right;font-size:11px;width:30px">${i+2}</td></tr>`;
+      });
+      tocHtml+=`</table></div>`;
     }
-    setExpProg(true,'仕上げ中…',93);
-    const total=doc.getNumberOfPages();
-    for(let p=1;p<=total;p++){doc.setPage(p);if(p>1)drawFooter(p,total);}
-    if(inclToc&&tocPage>0){
-      doc.setPage(tocPage);doc.setFillColor(253,248,240);doc.rect(0,0,PW,PH,'F');
-      drawHeader();drawFooter(tocPage,total);
-      doc.setFontSize(14);doc.setTextColor(61,44,30);doc.text('目  次',ML,MT+6);
-      doc.setDrawColor(192,57,43);doc.setLineWidth(0.4);doc.line(ML,MT+9,PW-MR,MT+9);
-      let ty=MT+17;
-      for(const item of tocData){
-        if(ty>PH-MB-4)break;
-        doc.setFontSize(9.5);doc.setTextColor(122,99,82);doc.text(item.date,ML,ty);
-        const tl=doc.splitTextToSize(item.title,CW-28);doc.setTextColor(61,44,30);doc.text(tl[0],ML+28,ty);
-        doc.setTextColor(192,57,43);doc.text(String(item.page),PW-MR,ty,{align:'right'});
-        doc.setDrawColor(220,205,190);doc.setLineWidth(0.2);doc.line(ML+28+doc.getTextWidth(tl[0])+2,ty-1,PW-MR-8,ty-1);ty+=6.5;
-      }
-    }
-    setExpProg(true,'ダウンロード中…',98);
-    doc.save(`diary_${new Date().toISOString().split('T')[0]}.pdf`);
-    showToast(`✓ ${target.length}件をPDFで書き出しました`);
-  } catch(err) { console.error(err); showToast('PDF生成に失敗しました: '+err.message); }
+
+    let entriesHtml='';
+    target.forEach(e=>{
+      const metaHtml=inclMeta&&(e.mood||e.weather)?`<div style="color:#b09880;font-size:11px;margin-bottom:4px">${e.weather||''} ${e.mood||''}</div>`:'';
+      const tagsHtml=inclTags&&(e.tags||[]).length?`<div style="margin-top:10px;color:#b09880;font-size:10px">${e.tags.map(t=>'#'+escH(t)).join('  ')}</div>`:'';
+      const photosHtml=(e.photos||[]).length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${e.photos.map(p=>`<img src="${p}" style="width:90px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #e8d9cc">`).join('')}</div>`:'';
+      entriesHtml+=`
+        <div class="entry-page">
+          <div style="font-size:10px;color:#c0392b;margin-bottom:4px">${formatDate(e.date)}</div>
+          ${metaHtml}
+          <div style="font-size:15px;font-weight:bold;color:#3d2c1e;margin-bottom:8px;border-bottom:1px solid #e8d9cc;padding-bottom:6px">${escH(e.title||'')}</div>
+          <div style="font-size:13px;color:#50412e;line-height:2;white-space:pre-wrap">${escH(e.body||'')}</div>
+          ${tagsHtml}${photosHtml}
+        </div>`;
+    });
+
+    const html=`<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Noto Serif JP',serif;background:#fff;color:#3d2c1e}
+  @media print{
+    body{margin:0}
+    .cover-page,.toc-page,.entry-page{page-break-after:always;break-after:page}
+    .no-break{page-break-inside:avoid;break-inside:avoid}
+  }
+  .cover-page{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:40px}
+  .toc-page,.entry-page{padding:28mm 20mm;min-height:100vh;border-left:2px solid #f0c0a0;margin-left:8mm;position:relative}
+  .header-bar{font-size:8px;color:#c0392b;border-bottom:0.6px solid #c0392b;padding-bottom:3px;margin-bottom:16px;letter-spacing:.1em}
+  @page{size:A4;margin:15mm 15mm 20mm 15mm}
+</style>
+</head><body>
+<div class="cover-page">
+  <div style="font-size:32px;font-weight:700;letter-spacing:.2em;color:#3d2c1e;margin-bottom:10px">わたしの日記帳</div>
+  <div style="font-size:14px;color:#7a6352;letter-spacing:.3em;margin-bottom:30px">My Private Diary</div>
+  <div style="width:140px;height:2px;background:#c0392b;margin-bottom:30px"></div>
+  <div style="font-size:13px;color:#b09880;margin-bottom:8px">${rl}</div>
+  <div style="font-size:12px;color:#b09880">全 ${target.length} 件</div>
+  <div style="position:absolute;bottom:30px;font-size:10px;color:#c8b49a">${dateStr}</div>
+</div>
+${tocHtml}
+${entriesHtml}
+</body></html>`;
+
+    setExpProg(true,'印刷ダイアログを開いています…',80);
+    const w=window.open('','_blank','width=800,height=900');
+    if(!w){showToast('ポップアップがブロックされました。ブラウザの設定でポップアップを許可してください。');return;}
+    w.document.write(html);
+    w.document.close();
+    // フォント読み込み後に印刷ダイアログを開く
+    w.onload=()=>{
+      setTimeout(()=>{
+        w.focus();
+        w.print();
+        showToast(`✓ ${target.length}件の印刷ダイアログを開きました（PDFとして保存できます）`);
+      },600);
+    };
+  } catch(err) { console.error(err); showToast('書き出しに失敗しました: '+err.message); }
   finally { btn.disabled=false; setExpProg(false); }
 }
 
