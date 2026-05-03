@@ -322,6 +322,22 @@ textarea { height: 72px; resize: vertical; }
 .log-recipe a:hover { text-decoration: underline; }
 .log-comment { font-size: 13px; color: var(--text2); margin-top: 3px; line-height: 1.55; }
 
+/* 履歴編集 */
+.log-edit-area {
+  display: none;
+  margin-top: 8px;
+  background: rgba(255,248,235,0.6);
+  border: 0.5px solid var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.log-edit-area.open { display: block; }
+.log-edit-area input[type=date],
+.log-edit-area textarea {
+  margin-bottom: 6px;
+}
+.log-edit-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
 /* 検索バー */
 .search-bar {
   position: relative;
@@ -424,7 +440,7 @@ textarea { height: 72px; resize: vertical; }
 <div id="app">
   <div class="app-header">
     <h1>🍳 マイレシピ集</h1>
-    <div class="subtitle">MY RECIPE COLLECTION</div>
+    <div class="subtitle">MY RECIPE COLLECTION <span style="opacity:0.55; font-size:10px;">v1.3</span></div>
     <div class="header-stats">
       <span id="stat-recipes">0 レシピ</span>
       <span>·</span>
@@ -893,15 +909,65 @@ function renderHistory() {
   }
   el.innerHTML = filtered.map(l => {
     const r = recipes.find(x => x.id === l.recipeId);
-    return `<div class="log-row">
+    const eid = 'edit-' + l.id;
+    return `<div class="log-row" id="row-${l.id}">
       <div class="log-date">${l.date.replace(/-/g,'/')}</div>
       <div class="log-body">
         <div class="log-recipe">${r ? `<a href="${r.url}" target="_blank">${r.name}</a>` : l.recipeName}</div>
-        ${l.comment ? `<div class="log-comment">${l.comment}</div>` : ''}
+        ${l.comment ? `<div class="log-comment" id="cmt-${l.id}">${l.comment}</div>` : `<div class="log-comment" id="cmt-${l.id}" style="display:none;"></div>`}
+        <div class="log-edit-area" id="${eid}">
+          <input type="date" id="edate-${l.id}" value="${l.date}" />
+          <textarea id="ecmt-${l.id}" placeholder="感想・メモ">${l.comment||''}</textarea>
+          <div class="log-edit-actions">
+            <button class="btn btn-sm btn-ghost" onclick="cancelEditLog('${l.id}')">キャンセル</button>
+            <button class="btn btn-sm btn-primary" onclick="saveEditLog('${l.id}')">保存</button>
+          </div>
+        </div>
       </div>
-      <button class="btn btn-sm btn-danger" onclick="deleteLog('${l.id}')">削除</button>
+      <div style="display:flex; gap:4px; flex-direction:column; align-items:flex-end;">
+        <button class="btn btn-sm btn-ghost" onclick="toggleEditLog('${l.id}')" id="editbtn-${l.id}">編集</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteLog('${l.id}')">削除</button>
+      </div>
     </div>`;
   }).join('');
+}
+
+function toggleEditLog(id) {
+  const area = document.getElementById('edit-' + id);
+  const btn = document.getElementById('editbtn-' + id);
+  if (area.classList.contains('open')) {
+    area.classList.remove('open');
+    btn.textContent = '編集';
+  } else {
+    area.classList.add('open');
+    btn.textContent = '▲';
+    document.getElementById('ecmt-' + id).focus();
+  }
+}
+
+function cancelEditLog(id) {
+  const area = document.getElementById('edit-' + id);
+  area.classList.remove('open');
+  document.getElementById('editbtn-' + id).textContent = '編集';
+  // reset values
+  const log = logs.find(l => l.id === id);
+  if (log) {
+    document.getElementById('edate-' + id).value = log.date;
+    document.getElementById('ecmt-' + id).value = log.comment || '';
+  }
+}
+
+function saveEditLog(id) {
+  const newDate = document.getElementById('edate-' + id).value;
+  const newCmt = document.getElementById('ecmt-' + id).value.trim();
+  if (!newDate) { toast('日付を入力してください'); return; }
+  const idx = logs.findIndex(l => l.id === id);
+  if (idx < 0) return;
+  logs[idx].date = newDate;
+  logs[idx].comment = newCmt;
+  saveAll();
+  renderHistory();
+  toast('記録を更新しました');
 }
 
 function renderLogSelect() {
